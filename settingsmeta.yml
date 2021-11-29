@@ -1,0 +1,13 @@
+
+skillMetadata:
+  sections:
+    - name: Recording Settings
+      fields:
+        - name: record_dir
+          type: text
+          label: Recordings Directory
+          value:
+        - name: default_duration
+          type: number
+          label: Default Record Duration
+          value: 30
