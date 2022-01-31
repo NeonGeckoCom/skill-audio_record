@@ -61,7 +61,7 @@ from mycroft.util.time import now_local
 try:
     import tkinter as tk
     import tkinter.simpledialog as dialog_box
-except ModuleNotFoundError:
+except ImportError:
     tk = None
     dialog_box = None
 
