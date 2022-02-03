@@ -80,37 +80,35 @@ class AudioRecordSkill(NeonSkill):
         self.file_ext = '.wav'
         self.filename = None
 
-        # default = {
-        #     'record_dir': self.configuration_available['dirVars']['docsDir'] + '/neon_recordings/',
-        #     'default_duration': 30
-        # }
-        # self.init_settings(default)
-        # If changed, update in alerts skill
-        self.record_dir = os.path.expanduser(self.settings.get('record_dir') or
-                                             os.path.join(self.local_config.get('dirVars', {})
-                                                          .get('docsDir') or "~/.neon",
-                                             "neon_recordings"))
-        # if not self.record_dir or self.record_dir == "":
-        #     self.record_dir = self.local_config['dirVars']['docsDir'] + '/neon_recordings/'
-        if not os.path.exists(self.record_dir):
-            os.makedirs(self.record_dir)
-        self.default_duration = int(self.settings['default_duration'])
-        if self.server:
-            self.last_recording = ''
-        else:
-            try:
-                self.last_recording = get_most_recent_file_in_dir(self.record_dir, '.wav')
-            except Exception as e:
-                LOG.error(e)
-                self.last_recording = ''
+        self._record_dir = None
         self.append_recording = ""
 
-        # self.settings["min_free_disk"] = 100  # min mb to leave free on disk
-        # self.settings["rate"] = 16000  # sample rate, hertz
-        # self.settings["channels"] = 1  # recording channels (1 = mono)
-        # self.settings["file_path"] = self.record_dir + '/neon-recording.wav'
-        # # "/tmp/neon-recording.wav"
-        # self.settings["duration"] = -1  # default = unknown
+    @property
+    def record_dir(self):
+        if not self._record_dir:
+            self._init_record_dir()
+        return self._record_dir
+
+    @property
+    def default_duration(self):
+        return int(self.settings['default_duration'])
+
+    @property
+    def last_recording(self):
+        try:
+            return get_most_recent_file_in_dir(self.record_dir, '.wav')
+        except Exception as e:
+            LOG.error(e)
+            return ""
+
+    def _init_record_dir(self):
+        self._record_dir = os.path.expanduser(
+            self.settings.get('record_dir') or
+            os.path.join(self.local_config.get('dirVars', {})
+                         .get('docsDir') or "~/.neon",
+                         "neon_recordings"))
+        if not os.path.exists(self._record_dir):
+            os.makedirs(self._record_dir)
 
     def initialize(self):
         intent = IntentBuilder("AudioRecordSkillIntent").optionally("ResumeKeyword").require("AudioRecordSkillKeyword")\
