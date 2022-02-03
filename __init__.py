@@ -264,7 +264,6 @@ class AudioRecordSkill(NeonSkill):
                 # self.duration = self.default_duration  # default recording duration
 
             if message.data.get("ResumeKeyword"):
-                self.last_recording = get_most_recent_file_in_dir(self.record_dir, '.wav')
                 file_to_continue = os.path.splitext(os.path.basename(self.last_recording))[0]
                 self.speak(f"I will append this to {file_to_continue}", private=True)
                 self.append_recording = self.last_recording
