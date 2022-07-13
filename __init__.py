@@ -51,8 +51,10 @@ from neon_utils.file_utils import get_most_recent_file_in_dir
 from neon_utils.message_utils import request_from_mobile
 from time import sleep
 from lingua_franca.format import nice_duration
+from neon_utils.signal_utils import create_signal, check_for_signal
 from neon_utils.skills.neon_skill import NeonSkill, LOG
-
+from neon_utils.user_utils import get_message_user, get_user_prefs
+from ovos_utils.xdg_utils import xdg_data_home
 from mycroft.audio import wait_while_speaking
 from mycroft.util import record, play_wav, create_daemon
 from mycroft.util.parse import extract_datetime
@@ -104,44 +106,34 @@ class AudioRecordSkill(NeonSkill):
     def _init_record_dir(self):
         self._record_dir = os.path.expanduser(
             self.settings.get('record_dir') or
-            os.path.join(self.local_config.get('dirVars', {})
-                         .get('docsDir') or "~/.neon",
-                         "neon_recordings"))
+            os.path.join(xdg_data_home(), "neon", "neon_recordings"))
         if not os.path.exists(self._record_dir):
             os.makedirs(self._record_dir)
 
     def initialize(self):
-        intent = IntentBuilder("AudioRecordSkillIntent").optionally("ResumeKeyword").require("AudioRecordSkillKeyword")\
+        intent = IntentBuilder("AudioRecordSkillIntent")\
+            .optionally("ResumeKeyword").require("AudioRecordSkillKeyword")\
             .optionally("Neon").build()
         self.register_intent(intent, self.handle_record)
 
-        intent = IntentBuilder("AltAudioRecordSkillIntent").require("Record").require("Audio").optionally("Neon")\
-            .build()
+        intent = IntentBuilder("AltAudioRecordSkillIntent")\
+            .require("Record").require("Audio").optionally("Neon").build()
         self.register_intent(intent, self.handle_record)
 
-        intent = IntentBuilder('AudioRecordSkillPlayIntent').require('AudioRecordSkillPlayVerb') \
+        intent = IntentBuilder('AudioRecordSkillPlayIntent')\
+            .require('AudioRecordSkillPlayVerb') \
             .require('AudioRecordSkillKeyword').optionally("Neon").build()
         self.register_intent(intent, self.handle_play)
 
-        intent = IntentBuilder('AudioRecordSkillDeleteIntent').require('AudioRecordSkillDeleteVerb') \
+        intent = IntentBuilder('AudioRecordSkillDeleteIntent')\
+            .require('AudioRecordSkillDeleteVerb') \
             .require('AudioRecordSkillKeyword').optionally("Neon").build()
         self.register_intent(intent, self.handle_delete)
 
-        # intent = IntentBuilder('AudioRecordSkillStopIntent').require('AudioRecordSkillStopVerb')\
-        #     .require('AudioRecordSkillKeyword').optionally("Neon").build()
-        # self.register_intent(intent, self.handle_stop)
-
-        intent = IntentBuilder('AudioRecordListIntent').require('AudioRecordSkillListKeyword')\
+        intent = IntentBuilder('AudioRecordListIntent')\
+            .require('AudioRecordSkillListKeyword')\
             .optionally("Neon").build()
         self.register_intent(intent, self.handle_list)
-
-        # yes_intent = IntentBuilder("AR_ConfirmYes").require("ConfirmYes").optionally("Neon").build()
-        # self.register_intent(yes_intent, self.handle_yes_intent)
-        # self.disable_intent('AR_ConfirmYes')
-        #
-        # no_intent = IntentBuilder("AR_ConfirmNo").require("ConfirmNo").optionally("Neon").build()
-        # self.register_intent(no_intent, self.handle_no_intent)
-        # self.disable_intent('AR_ConfirmNo')
 
     def remaining_time(self):
         return self.duration - (now_local() - self.start_time).total_seconds()
@@ -178,10 +170,7 @@ class AudioRecordSkill(NeonSkill):
 
     def handle_delete(self, message):
         LOG.debug(message.data)
-        user = self.get_utterance_user(message)
-        # user = None
-        # if self.server:
-        #     user = nick(message.context["flac_filename"])
+        user = get_message_user(message)
         filename = self.get_filename(message.data.get('utterance'), user)
         if os.path.isfile(os.path.join(self.record_dir, filename)):
             self.file_path = os.path.join(self.record_dir, filename)
@@ -195,14 +184,14 @@ class AudioRecordSkill(NeonSkill):
             # if (self.check_for_signal("skip_wake_word", -1) and message.data.get("Neon")) \
             #         or not self.check_for_signal("skip_wake_word", -1):
             if not exists(self.file_path):
-                if not self.check_for_signal("SKILLS_useDefaultResponses", -1):
+                if not get_user_prefs(message)['response_mode'].get('limit_dialog'):
                     self.speak_dialog('audio.record.no.recording', private=True)
                 else:
                     self.speak("No audio recordings found", private=True)
             else:
                 try:
                     os.remove(self.file_path)
-                    if not self.check_for_signal("SKILLS_useDefaultResponses", -1):
+                    if not get_user_prefs(message)['response_mode'].get('limit_dialog'):
                         self.speak_dialog('audio.record.removed', private=True)
                     else:
                         self.speak("Most recent audio recording removed.", private=True)
@@ -219,7 +208,6 @@ class AudioRecordSkill(NeonSkill):
         if self.play_process:
             self.end_playback()
             return True
-        self.clear_signals("AR")
         return False
 
     # Show a countdown using the eyes
@@ -248,7 +236,7 @@ class AudioRecordSkill(NeonSkill):
         #         or not self.check_for_signal("skip_wake_word", -1) or self.check_for_signal("CORE_neonInUtterance"):
         if self.neon_in_request(message):
             utterance = message.data.get('utterance')
-            user = self.get_utterance_user(message)
+            user = get_message_user(message)
             # user = None
             # if self.server:
             #     user = nick(message.context["flac_filename"])
@@ -267,7 +255,7 @@ class AudioRecordSkill(NeonSkill):
                 file_to_continue = os.path.splitext(os.path.basename(self.last_recording))[0]
                 self.speak(f"I will append this to {file_to_continue}", private=True)
                 self.append_recording = self.last_recording
-                self.create_signal("AR_AppendRecording")
+                create_signal("AR_AppendRecording")
                 self.filename = file_to_continue + "__continued"
                 self.start_recording(message)
             else:
@@ -277,8 +265,8 @@ class AudioRecordSkill(NeonSkill):
                 if request_from_mobile(message):
                     # self.speak("MOBILE-INTENT AUDIO&name=" + filename + "&duration=" + str(self.duration))
                     self.speak("Audio recording started", private=True)
-                    self.mobile_skill_intent("play_recording", {"name": filename,
-                                                                "duration": self.duration}, message)
+                    # self.mobile_skill_intent("play_recording", {"name": filename,
+                    #                                             "duration": self.duration}, message)
                     # self.socket_io_emit('recorder', f"&name={filename}&duration={self.duration}",
                     #                     message.context["flac_filename"])
                 # TODO: If Server?
@@ -309,7 +297,7 @@ class AudioRecordSkill(NeonSkill):
             else:
                 record_for = nice_duration(self.duration)
                 # record_for = self.get_nice_duration(self.duration)
-                if not self.check_for_signal("SKILLS_useDefaultResponses", -1):
+                if not get_user_prefs(message)['response_mode'].get('limit_dialog'):
                     self.speak_dialog('audio.record.start.duration', {'duration': record_for},
                                       message=message, private=True)
                 else:
@@ -328,7 +316,7 @@ class AudioRecordSkill(NeonSkill):
             # self.last_index = 24
             self.schedule_repeating_event(self.recording_feedback, None, 1, name='RecordingFeedback')
         else:
-            if not self.check_for_signal("SKILLS_useDefaultResponses", -1):
+            if not get_user_prefs(message)['response_mode'].get('limit_dialog'):
                 self.speak_dialog("audio.record.disk.full", message=message, private=True)
             else:
                 self.speak("You have reached the maximum disk usage. Free some disk space to record an audio",
@@ -347,7 +335,7 @@ class AudioRecordSkill(NeonSkill):
             if not self.has_free_disk_space():
                 # Out of space
                 self.end_recording()
-                if not self.check_for_signal("SKILLS_useDefaultResponses", -1):
+                if not get_user_prefs()['response_mode'].get('limit_dialog'):
                     self.speak_dialog("audio.record.disk.full", private=True)
                 else:
                     self.speak("You have reached the maximum disk usage. Free some disk space to record audio.",
@@ -366,7 +354,7 @@ class AudioRecordSkill(NeonSkill):
             self.record_process = None
             # Calc actual recording duration
             self.duration = (now_local() - self.start_time).total_seconds()
-            if self.check_for_signal("AR_AppendRecording"):
+            if check_for_signal("AR_AppendRecording"):
                 output_filename = os.path.basename(self.append_recording)
                 os.rename(self.append_recording, os.path.join(self.record_dir, "first_file" + self.file_ext))
                 self.speak(f"Appending audio to {output_filename}", private=True)
@@ -400,7 +388,7 @@ class AudioRecordSkill(NeonSkill):
         #         or not self.check_for_signal("skip_wake_word", -1) or self.check_for_signal("CORE_neonInUtterance"):
         if self.neon_in_request(message):
             utterance = message.data.get('utterance')
-            user = self.get_utterance_user(message)
+            user = get_message_user(message)
             # user = None
             # if self.server:
             #     user = nick(message.context["flac_filename"])
@@ -408,14 +396,14 @@ class AudioRecordSkill(NeonSkill):
 
             if request_from_mobile(message):
                 self.speak("Playing audio", private=True)
-                if to_find:
-                    # self.speak("MOBILE-INTENT PLAY_AUDIO&name=" + to_find)
-                    self.mobile_skill_intent("play_recording", {"name": to_find}, message)
-                    # self.socket_io_emit('play_recording', f"&name={to_find}", message.context["flac_filename"])
-                else:
-                    # self.speak("MOBILE-INTENT PLAY_AUDIO&name=_")
-                    self.mobile_skill_intent("play_recording", {"name": '_'}, message)
-                    # self.socket_io_emit('play_recording', "&name=_", message.context["flac_filename"])
+                # if to_find:
+                #     # self.speak("MOBILE-INTENT PLAY_AUDIO&name=" + to_find)
+                #     self.mobile_skill_intent("play_recording", {"name": to_find}, message)
+                #     # self.socket_io_emit('play_recording', f"&name={to_find}", message.context["flac_filename"])
+                # else:
+                #     # self.speak("MOBILE-INTENT PLAY_AUDIO&name=_")
+                #     self.mobile_skill_intent("play_recording", {"name": '_'}, message)
+                #     # self.socket_io_emit('play_recording', "&name=_", message.context["flac_filename"])
             else:
                 if to_find:
                     self.file_path = self.get_recording(to_find)
@@ -431,6 +419,7 @@ class AudioRecordSkill(NeonSkill):
                     self.play_process = play_wav(self.file_path)
                     # self.enclosure.eyes_color(64, 255, 64)  # set color greenish
                     # self.last_index = 24
+                    # TODO: This works, but datetime should be spec'd
                     self.schedule_repeating_event(self.playback_feedback, None, 1, name='PlaybackFeedback')
                 elif get_most_recent_file_in_dir(self.record_dir, self.file_ext):
                     self.speak("Here is your most recent recording.", private=True)
@@ -446,7 +435,7 @@ class AudioRecordSkill(NeonSkill):
                     # self.last_index = 24
                     self.schedule_repeating_event(self.playback_feedback, None, 1, name='PlaybackFeedback')
                 else:
-                    if not self.check_for_signal("SKILLS_useDefaultResponses", -1):
+                    if not get_user_prefs(message)['response_mode'].get('limit_dialog'):
                         self.speak_dialog('audio.record.no.recording', private=True)
                     else:
                         self.speak("No recording found", private=True)
@@ -525,51 +514,33 @@ class AudioRecordSkill(NeonSkill):
         except Exception as e:
             LOG.error(e)
             spoken_filename = filename
-        self.speak_dialog("ConfirmFilename", {'file': spoken_filename}, private=True)
-        self.await_confirmation(self.get_utterance_user(message), "confirmFilename")
-        # self.create_signal("AR_ConfirmFilename")
-        # self.enable_intent('AR_ConfirmYes')
-        # self.enable_intent('AR_ConfirmNo')
-        # self.request_check_timeout(30, ['AR_ConfirmYes', 'AR_ConfirmNo'])
+        # self.speak_dialog("ConfirmFilename", {'file': spoken_filename}, private=True)
+        resp = self.ask_yesno("ConfirmFilename", {'file': spoken_filename})
         self.filename = filename  # TODO: Remove from self param for multi-user (see DCC confirmation num, Controls?)
-
-    def converse(self, message=None):
-        user = self.get_utterance_user(message)
-        LOG.debug(self.actions_to_confirm)
-        LOG.debug("DM: Start converse!")
-        if user in self.actions_to_confirm.keys():
-            result = self.check_yes_no_response(message)
-            if result == -1:
-                # This isn't a response, ignore it
-                return False
-            elif not result:
-                # User said no
-                action_to_confirm = self.actions_to_confirm.pop(user)[0]
-                if action_to_confirm == "confirmFilename":
-                    self.speak("Please type in a filename.", private=True)
-                    if tk:
-                        try:
-                            parent = tk.Tk()
-                            parent.withdraw()
-                            self.filename = dialog_box.askstring("Audio Recording", "Please name your audio recording:")
-                            parent.quit()
-                            LOG.info(self.filename)
-                        except Exception as e:
-                            LOG.info(e)
-                    if self.filename:
-                        create_daemon(self.start_recording, kwargs={"message": message})
-                    else:
-                        self.speak("I did not get a filename. Please, try again.", private=True)
-                return True
-            elif result:
-                # TODO: Error here?
-                # User said yes
-                action_to_confirm = self.actions_to_confirm.pop(user)[0]
-                if action_to_confirm == "confirmFilename":
-                    create_daemon(self.start_recording, kwargs={"message": message})
-                # LOG.debug("DM: returning!!")
-                return True
-        return False
+        if resp == "yes":
+            # User said yes
+            create_daemon(self.start_recording, kwargs={"message": message})
+        elif resp == "no":
+            self.speak("Please type in a filename.", private=True)
+            if tk:
+                try:
+                    parent = tk.Tk()
+                    parent.withdraw()
+                    self.filename = \
+                        dialog_box.askstring("Audio Recording",
+                                             "Please name your audio recording:")
+                    parent.quit()
+                    LOG.info(self.filename)
+                except Exception as e:
+                    LOG.info(e)
+            if self.filename:
+                create_daemon(self.start_recording,
+                              kwargs={"message": message})
+            else:
+                self.speak("I did not get a filename. Please, try again.",
+                           private=True)
+        else:
+            self.speak_dialog("not_doing_anything")
 
 
 def create_skill():
