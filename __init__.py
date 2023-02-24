@@ -52,8 +52,11 @@ from neon_utils.message_utils import request_from_mobile
 from time import sleep
 from lingua_franca.format import nice_duration
 from neon_utils.signal_utils import create_signal, check_for_signal
-from neon_utils.skills.neon_skill import NeonSkill, LOG
+from neon_utils.skills.neon_skill import NeonSkill
 from neon_utils.user_utils import get_message_user, get_user_prefs
+from ovos_utils import classproperty
+from ovos_utils.log import LOG
+from ovos_utils.process_utils import RuntimeRequirements
 from ovos_utils.xdg_utils import xdg_data_home
 from mycroft.audio import wait_while_speaking
 from mycroft.util import record, play_wav, create_daemon
@@ -84,6 +87,18 @@ class AudioRecordSkill(NeonSkill):
 
         self._record_dir = None
         self.append_recording = ""
+
+    @classproperty
+    def runtime_requirements(self):
+        return RuntimeRequirements(network_before_load=False,
+                                   internet_before_load=False,
+                                   gui_before_load=False,
+                                   requires_internet=False,
+                                   requires_network=False,
+                                   requires_gui=False,
+                                   no_internet_fallback=True,
+                                   no_network_fallback=True,
+                                   no_gui_fallback=True)
 
     @property
     def record_dir(self):
