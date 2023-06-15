@@ -72,8 +72,8 @@ except ImportError:
 
 
 class AudioRecordSkill(NeonSkill):
-    def __init__(self):
-        super(AudioRecordSkill, self).__init__("AudioRecordSkill")
+    def __init__(self, **kwargs):
+        NeonSkill.__init__(self, **kwargs)
         self.play_process = None
         self.record_process = None
         self.start_time = now_local()
@@ -556,7 +556,3 @@ class AudioRecordSkill(NeonSkill):
                            private=True)
         else:
             self.speak_dialog("not_doing_anything")
-
-
-def create_skill():
-    return AudioRecordSkill()
